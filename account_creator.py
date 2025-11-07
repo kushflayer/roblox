@@ -1,68 +1,62 @@
+# account_creator.py
 import time
 import random
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from config import NUM_ACCOUNTS, BASE_USERNAME, PASSWORD, BIRTH_MONTH, BIRTH_DAY, BIRTH_YEAR, EMAIL_DOMAIN
+from config import *
+from webhook import send  # ← NEW
+
+# ←←←  ADD YOUR WEBHOOK URL HERE  ←←←
+WEBHOOK_URL = "https://discord.com/api/webhooks/..."   # ← PUT YOUR URL
 
 def create_account(username, password, email):
-    # Setup Chrome driver
     service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service)
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # remove if you want to see browser
+    driver = webdriver.Chrome(service=service, options=options)
+    
+    success = False
+    details = ""
     
     try:
-        # Go to Roblox signup
         driver.get("https://www.roblox.com/signup")
-        time.sleep(2)
-        
-        # Fill username
-        username_field = driver.find_element(By.ID, "signup-username-field")
-        username_field.send_keys(username)
-        
-        # Fill password
-        password_field = driver.find_element(By.ID, "signup-password-field")
-        password_field.send_keys(password)
-        
-        # Fill email (generate temp email)
-        email_field = driver.find_element(By.ID, "signup-email-field")
-        email_field.send_keys(email)
-        
-        # Gender (select first option)
-        gender_select = driver.find_element(By.ID, "signup-gender")
-        gender_select.click()
-        time.sleep(1)
-        driver.find_element(By.XPATH, "//option[@value='Male']").click()  # Or 'Female'
-        
+        time.sleep(3)
+
+        driver.find_element(By.ID, "signup-username").send_keys(username)
+        driver.find_element(By.ID, "signup-password").send_keys(password)
+        driver.find_element(By.ID, "signup-email").send_keys(email)
+
         # Birthday
-        month_select = driver.find_element(By.ID, "month")
-        month_select.send_keys(BIRTH_MONTH)
-        day_select = driver.find_element(By.ID, "day")
-        day_select.send_keys(BIRTH_DAY)
-        year_select = driver.find_element(By.ID, "year")
-        year_select.send_keys(BIRTH_YEAR)
-        
-        # Submit (but pause for CAPTCHA)
-        print(f"Account {username}: Form filled. Solve CAPTCHA manually in browser, then press Enter here.")
-        input("Press Enter after solving CAPTCHA and submitting...")
-        
-        # Wait for success (check for dashboard or error)
-        time.sleep(5)
-        if "dashboard" in driver.current_url.lower():
-            print(f"Success: {username} created!")
+        driver.find_element(By.ID, "month").send_keys(BIRTH_MONTH)
+        driver.find_element(By.ID, "day").send_keys(BIRTH_DAY)
+        driver.find_element(By.ID, "year").send_keys(BIRTH_YEAR)
+
+        print(f"[+] {username} → Solve CAPTCHA, then press ENTER")
+        input("    Press ENTER after you submit...")
+
+        time.sleep(6)
+        if "create" in driver.current_url.lower() or "dashboard" in driver.current_url.lower():
+            success = True
+            details = f"Email: {email}"
             with open("created_accounts.txt", "a") as f:
                 f.write(f"{username}:{password}:{email}\n")
         else:
-            print(f"Failed: {username}")
-            
+            details = driver.page_source[:200]
+
     except Exception as e:
-        print(f"Error for {username}: {e}")
+        details = str(e)[:200]
     finally:
         driver.quit()
 
+    # ←←←  SEND RESULT TO YOUR HOSTING  ←←←
+    send(WEBHOOK_URL, username, "SUCCESS" if success else "FAILED", details)
+    print(f"{'SUCCESS' if success else 'FAILED'} → {username}")
+
 if __name__ == "__main__":
     for i in range(NUM_ACCOUNTS):
-        username = f"{BASE_USERNAME}{random.randint(1000, 9999)}"
+        username = f"{BASE_USERNAME}{random.randint(1000,99999)}"
         email = f"{username.lower()}{EMAIL_DOMAIN}"
         create_account(username, PASSWORD, email)
-        time.sleep(10)  # Delay to avoid rate limits
+        time.sleep(12)  # anti-rate-limit
